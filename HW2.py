@@ -2,6 +2,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import sys
 
 def read_img(path):
     # opencv read image in BGR color space
@@ -37,7 +38,7 @@ def matcher(kp1, des1, img1, kp2, des2, img2, threshold):
     matches = []
     for pair in good:
         matches.append(list(kp1[pair[0].queryIdx].pt + kp2[pair[0].trainIdx].pt))
-    return matches
+    return np.array(matches)
 
 def knnMatch(kp1, des1, kp2, des2, threshold):
     # KNN
@@ -82,7 +83,7 @@ def draw_matches(matches, img1,img2):
 
 def homography(pairs):
     rows = []
-    for i in range(pairs.shape[0]):
+    for i in range(len(pairs)):
         p1 = np.append(pairs[i][0:2], 1)
         p2 = np.append(pairs[i][2:4], 1)
         row1 = [0, 0, 0, p1[0], p1[1], p1[2], -p2[1]*p1[0], -p2[1]*p1[1], -p2[1]*p1[2]]
@@ -90,14 +91,20 @@ def homography(pairs):
         rows.append(row1)
         rows.append(row2)
     rows = np.array(rows)
+    # sloving A = h0 use svd 
+    # V contain the eigen vectors of matrix A
     U, s, V = np.linalg.svd(rows)
+    # idx = np.argmin(s)
+    # H = V[idx].reshape(3, 3)
     H = V[-1].reshape(3, 3)
     H = H/H[2, 2] # standardize to let w*H[2,2] = 1
     return H
 
 def random_point(matches, k=4):
     idx = random.sample(range(len(matches)), k)
-    point = [matches[i] for i in idx ]
+    point = []
+    for i in idx : 
+        point.append(matches[i])
     return np.array(point)
 
 def get_error(points, H):
@@ -201,8 +208,8 @@ if __name__ == '__main__':
     img_right_gray, img_right, img_right_rgb = read_img("test/hill2.jpg")
     left_kp,left_des = SIFT(img_left_gray)
     right_kp,right_des = SIFT(img_right_gray)
-    matches = knnMatch(left_kp,left_des,right_kp,right_des, 0.5)
-    # matches = matcher(left_kp, left_des, img_left_rgb, right_kp, right_des, img_left_rgb, 0.5)
+    # matches = knnMatch(left_kp,left_des,right_kp,right_des, 0.5)
+    matches = matcher(left_kp, left_des, img_left_rgb, right_kp, right_des, img_left_rgb, 0.5)
     # draw_matches(matches,img_left_rgb,img_right_rgb)
     # exit()
     inliers, H = RANSAC(matches, 0.5, 2000)
