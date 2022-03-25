@@ -2,6 +2,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import sys
 
 def read_img(path):
     # opencv read image in BGR color space
@@ -83,8 +84,7 @@ def draw_matches(matches, img1,img2):
 
 def homography(pairs):
     rows = []
-    # calc the homography matrix to traslate the key point on img1 to img2 (wrapping the img1)
-    for i in range(pairs.shape[0]):
+    for i in range(len(pairs)):
         p1 = np.append(pairs[i][0:2], 1)
         p2 = np.append(pairs[i][2:4], 1)
         row1 = [0, 0, 0, p1[0], p1[1], p1[2], -p2[1]*p1[0], -p2[1]*p1[1], -p2[1]*p1[2]]
@@ -92,7 +92,11 @@ def homography(pairs):
         rows.append(row1)
         rows.append(row2)
     rows = np.array(rows)
+    # sloving A = h0 use svd 
+    # V contain the eigen vectors of matrix A
     U, s, V = np.linalg.svd(rows)
+    # idx = np.argmin(s)
+    # H = V[idx].reshape(3, 3)
     H = V[-1].reshape(3, 3)
     H = H/H[2, 2] # standardize to let w*H[2,2] = 1 to fit the format of homography matrix
     return H
