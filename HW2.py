@@ -7,11 +7,12 @@ def read_img(path):
     # opencv read image in BGR color space
     img = cv2.imread(path)
     img_gray= cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    return img_gray, img, img_rgb
+    return img_gray, img
 
-def im_show(window_name,img):
+def creat_im_window(window_name,img):
     cv2.imshow(window_name,img)
+
+def im_show():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -25,7 +26,7 @@ def draw_SIFT(gray, rgb, kp):
     img = cv2.drawKeypoints(gray, kp, tmp, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     return img
 
-def matcher(kp1, des1, img1, kp2, des2, img2, threshold):
+def matcher(kp1, des1, kp2, des2, threshold):
     # BFMatcher with default params
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(des1,des2, k=2)
@@ -37,7 +38,7 @@ def matcher(kp1, des1, img1, kp2, des2, img2, threshold):
     matches = []
     for pair in good:
         matches.append(list(kp1[pair[0].queryIdx].pt + kp2[pair[0].trainIdx].pt))
-    return matches
+    return np.array(matches)
 
 def knnMatch(kp1, des1, kp2, des2, threshold):
     # KNN
@@ -82,6 +83,7 @@ def draw_matches(matches, img1,img2):
 
 def homography(pairs):
     rows = []
+    # calc the homography matrix to traslate the key point on img1 to img2 (wrapping the img1)
     for i in range(pairs.shape[0]):
         p1 = np.append(pairs[i][0:2], 1)
         p2 = np.append(pairs[i][2:4], 1)
@@ -92,24 +94,29 @@ def homography(pairs):
     rows = np.array(rows)
     U, s, V = np.linalg.svd(rows)
     H = V[-1].reshape(3, 3)
-    H = H/H[2, 2] # standardize to let w*H[2,2] = 1
+    H = H/H[2, 2] # standardize to let w*H[2,2] = 1 to fit the format of homography matrix
     return H
 
 def random_point(matches, k=4):
     idx = random.sample(range(len(matches)), k)
-    point = [matches[i] for i in idx ]
+    point = []
+    for i in idx:
+        point.append(matches[i])
     return np.array(point)
 
 def get_error(points, H):
-    num_points = len(points)
-    all_p1 = np.concatenate((points[:, 0:2], np.ones((num_points, 1))), axis=1)
-    all_p2 = points[:, 2:4]
-    estimate_p2 = np.zeros((num_points, 2))
-    for i in range(num_points):
-        temp = np.dot(H, all_p1[i])
-        estimate_p2[i] = (temp/temp[2])[0:2] # set index 2 to 1 and slice the index 0, 1
-    # Compute error
-    errors = np.linalg.norm(all_p2 - estimate_p2 , axis=1) ** 2
+    num = len(points)
+    p1_arr = np.ones((num,3))
+    p1_arr[:,0:2] = points[:,0:2]
+    p2_arr = points[:,2:4]
+    estimate_p2 = np.zeros((num, 2))
+    for i in range(num):
+        temp = np.dot(H, p1_arr[i])
+        # set index 2 to 1 and slice the index 0, 1
+        estimate_p2[i] = (temp/temp[2])[0:2]
+    # Compute square error between estimation & ground truth 
+    errors = np.linalg.norm(p2_arr - estimate_p2 , axis=1) ** 2
+
     return errors
 
 def RANSAC(matches, threshold, iters):
@@ -147,33 +154,38 @@ def stitch_img(img1, img2, H):
                             0.0, 1.0, cv2.NORM_MINMAX)   
     
     # img1 image
-    height_l, width_l, channel_l = img1.shape
-    corners = [[0, 0, 1], [width_l, 0, 1], [width_l, height_l, 1], [0, height_l, 1]]
-    corners_new = [np.dot(H, corner) for corner in corners]
+    height1, width1, channel1 = img1.shape
+    # 4 corners of image1 in homogenus coordinate
+    corners = [[0, 0, 1], [width1, 0, 1], [width1, height1, 1], [0, height1, 1]]
+    # calc the new corner after homography (Perspective Transformation)
+    corners_new = []
+    for corner in corners:
+        corners_new.append(np.dot(H, corner))
+    # dimension : 3(x,y,s) x 4(4 corners)
     corners_new = np.array(corners_new).T 
-    x_news = corners_new[0] / corners_new[2]
-    y_news = corners_new[1] / corners_new[2]
-    y_min = min(y_news)
-    x_min = min(x_news)
+    # let the last coordinate is 1
+    corners_new = corners_new[0:3,:]/corners_new[2,:].reshape(1,-1)
+    # now I get the position on image2 of 4 corners from image 1
+    # so I can find the most left-down point to know how big new imgae needing to append
+    # because it stitchs the image on left and right , the result should be bigger
+    # and the result of homograpy should contain minus position. 
+    # It's not necessary to make sure that the x_min , y_min aren't > 0 
+    x_min = min(min(corners_new[0]),0)
+    y_min = min(min(corners_new[1]),0)
 
+    # construct a translation matrix translate image 2 to right top and give some space to image 1
     translation_mat = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]])
+    # let translation matirx work on image2 space
     H = np.dot(translation_mat, H)
     
-    # Get height, width
-    height_new = int(round(abs(y_min) + height_l))
-    width_new = int(round(abs(x_min) + width_l))
+    height2, width2, channel2 = img2.shape
+    
+    height_new = int(round(abs(y_min) + height2))
+    width_new = int(round(abs(x_min) + width2))
     size = (width_new, height_new)
 
-    # img2 image
+    # let two image in same space and same size
     warped_l = cv2.warpPerspective(src=img1, M=H, dsize=size)
-
-    height_r, width_r, channel_r = img2.shape
-    
-    height_new = int(round(abs(y_min) + height_r))
-    width_new = int(round(abs(x_min) + width_r))
-    size = (width_new, height_new)
-    
-
     warped_r = cv2.warpPerspective(src=img2, M=translation_mat, dsize=size)
      
     black = np.zeros(3)  # Black pixel.
@@ -188,6 +200,7 @@ def stitch_img(img1, img2, H):
                 warped_l[i, j, :] = pixel_l
             elif np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
                 warped_l[i, j, :] = pixel_r
+            # blending
             elif not np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
                 warped_l[i, j, :] = (pixel_l + pixel_r) / 2
             else:
@@ -197,15 +210,18 @@ def stitch_img(img1, img2, H):
     return stitch_image
 
 if __name__ == '__main__':
-    img_left_gray, img_left, img_left_rgb = read_img("test/hill1.jpg")
-    img_right_gray, img_right, img_right_rgb = read_img("test/hill2.jpg")
+    img_left_gray, img_left = read_img("test/hill1.jpg")
+    img_right_gray, img_right = read_img("test/hill2.jpg")
     left_kp,left_des = SIFT(img_left_gray)
     right_kp,right_des = SIFT(img_right_gray)
-    matches = knnMatch(left_kp,left_des,right_kp,right_des, 0.5)
-    # matches = matcher(left_kp, left_des, img_left_rgb, right_kp, right_des, img_left_rgb, 0.5)
+    # matches = knnMatch(left_kp,left_des,right_kp,right_des, 0.5)
+
+    # for test using opencv macher is faster
+    matches = matcher(left_kp, left_des, right_kp, right_des, 0.5)
     # draw_matches(matches,img_left_rgb,img_right_rgb)
     # exit()
     inliers, H = RANSAC(matches, 0.5, 2000)
     # draw_matches(inliers,img_left_rgb,img_right_rgb)
-    plt.imshow(stitch_img(img_left_rgb, img_right_rgb, H))
-    plt.show()
+    result = stitch_img(img_left, img_right, H)
+    creat_im_window("Result",result)
+    im_show()
