@@ -7,8 +7,16 @@ import sys
 def read_img(path):
     # opencv read image in BGR color space
     img = cv2.imread(path)
-    img_gray= cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    return img_gray, img
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    return img, img_gray
+
+# the dtype of img must be "uint8" to avoid the error of SIFT detector
+def img_to_gray(img):
+    if img.dtype != "uint8":
+        print("The input image dtype is not uint8 , image type is : ",img.dtype)
+        return
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    return img_gray
 
 def creat_im_window(window_name,img):
     cv2.imshow(window_name,img)
@@ -213,9 +221,7 @@ def stitch_img(img1, img2, H):
     stitch_image = warped_l[:warped_r.shape[0], :warped_r.shape[1], :]
     return stitch_image
 
-if __name__ == '__main__':
-    img_left_gray, img_left = read_img("test/hill1.jpg")
-    img_right_gray, img_right = read_img("test/hill2.jpg")
+def SIFT_img_concate(img_left,img_left_gray,img_right,img_right_gray):
     left_kp,left_des = SIFT(img_left_gray)
     right_kp,right_des = SIFT(img_right_gray)
     # matches = knnMatch(left_kp,left_des,right_kp,right_des, 0.5)
@@ -227,5 +233,16 @@ if __name__ == '__main__':
     inliers, H = RANSAC(matches, 0.5, 2000)
     # draw_matches(inliers,img_left_rgb,img_right_rgb)
     result = stitch_img(img_left, img_right, H)
+    # convert the dtype from float to uint8
+    result = (result * 255).astype("uint8")
+    result_gray = img_to_gray(result)
+    return result, result_gray
+
+if __name__ == '__main__':
+    img1 ,img1_gray = read_img("test/hotel/m1.jpg")
+    img2 ,img2_gray = read_img("test/hotel/m2.jpg")
+    img3 ,img3_gray = read_img("test/hotel/m3.jpg")
+    result , result_gray =  SIFT_img_concate(img1 ,img1_gray ,img2 ,img2_gray)
+    result, result_gray =  SIFT_img_concate(result ,result_gray ,img3 ,img3_gray)
     creat_im_window("Result",result)
     im_show()
