@@ -210,9 +210,9 @@ def stitch_img(img1, img2, H):
     y_min = min(min(corners_new[1]),0)
 
     # construct a translation matrix translate image 2 to right top and give some space to image 1
-    translation_mat = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]])
+    A = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]])
     # let translation matirx work on image2 space
-    H = np.dot(translation_mat, H)
+    H = A @ H
     
     height2, width2, channel2 = img2.shape
     
@@ -222,9 +222,11 @@ def stitch_img(img1, img2, H):
 
     # let two image in same space and same size
     warped_l = cv2.warpPerspective(src=img1, M=H, dsize=size)
-    warped_r = cv2.warpPerspective(src=img2, M=translation_mat, dsize=size)
-    creat_im_window("left",warped_l)
-    creat_im_window("right",warped_r)
+    warped_r = cv2.warpPerspective(src=img2, M=A, dsize=size)
+    # creat_im_window("left",img1)
+    # creat_im_window("right",img2)
+    # creat_im_window("left_w",warped_l)
+    # creat_im_window("right_w",warped_r)
     # im_show()
      
     black = np.zeros(3)  # Black pixel.
@@ -276,12 +278,10 @@ def SIFT_img_concate(img_left,img_left_gray,img_right,img_right_gray):
     return result, result_gray
 
 if __name__ == '__main__':
-    img1 ,img1_gray = read_img("test/hotel/m1.jpg")
-    img2 ,img2_gray = read_img("test/hotel/m2.jpg")
-    img3 ,img3_gray = read_img("test/hotel/m3.jpg")
-    img4 ,img4_gray = read_img("test/hotel/m4.jpg")
-    result , result_gray =  SIFT_img_concate(img1 ,img1_gray ,img2 ,img2_gray)
-    # result, result_gray =  SIFT_img_concate(result ,result_gray ,img3 ,img3_gray)
-    # result, result_gray =  SIFT_img_concate(result ,result_gray ,img4 ,img4_gray)
+    result , result_gray = read_img("test/hotel/m1.jpg")
+    for i in range(2,3):
+        img_path = "test/hotel/m{}.jpg".format(i)
+        img , img_gray = read_img(img_path)
+        result, result_gray =  SIFT_img_concate(result ,result_gray ,img ,img_gray)
     creat_im_window("Result",result)
     im_show()
