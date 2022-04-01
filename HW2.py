@@ -2,11 +2,13 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import math
 import sys
 
 def read_img(path):
     # opencv read image in BGR color space
     img = cv2.imread(path)
+    img = cylindricalProjection(img)
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     return img, img_gray
 
@@ -17,6 +19,28 @@ def img_to_gray(img):
         return
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     return img_gray
+
+def cylindricalProjection(img) :
+    rows = img.shape[0]
+    cols = img.shape[1]
+
+    #f = cols / (2 * math.tan(np.pi / 8))
+    result = np.zeros_like(img)
+    center_x = int(cols / 2)
+    center_y = int(rows / 2)
+    alpha = math.pi / 4
+    f = cols / (2 * math.tan(alpha / 2))
+    for  y in range(rows):
+        for x in range(cols):
+            theta = math.atan((x- center_x )/ f)
+            point_x = int(f * math.tan( (x-center_x) / f) + center_x)
+            point_y = int( (y-center_y) / math.cos(theta) + center_y)
+
+            if point_x >= cols or point_x < 0 or point_y >= rows or point_y < 0:
+                pass
+            else:
+                result[y , x, :] = img[point_y , point_x ,:]
+    return result
 
 def creat_im_window(window_name,img):
     cv2.imshow(window_name,img)
@@ -199,8 +223,16 @@ def stitch_img(img1, img2, H):
     # let two image in same space and same size
     warped_l = cv2.warpPerspective(src=img1, M=H, dsize=size)
     warped_r = cv2.warpPerspective(src=img2, M=translation_mat, dsize=size)
+    creat_im_window("left",warped_l)
+    creat_im_window("right",warped_r)
+    # im_show()
      
     black = np.zeros(3)  # Black pixel.
+
+    # blending parameter
+    blending_l = math.floor(-x_min)
+    blending_r = math.ceil(max(corners_new[0]) - x_min)
+    blending_total_w = blending_r - blending_l
     
     # Stitching procedure, store results in warped_l.
     for i in range(warped_r.shape[0]):
@@ -214,7 +246,11 @@ def stitch_img(img1, img2, H):
                 warped_l[i, j, :] = pixel_r
             # blending
             elif not np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
-                warped_l[i, j, :] = (pixel_l + pixel_r) / 2
+                weight = j - blending_l
+                # blending
+                warped_l[i, j, :] = (pixel_l * (blending_total_w - weight) + pixel_r * weight) / blending_total_w
+                # average
+                # warped_l[i, j, :] = (pixel_l + pixel_r ) / 2
             else:
                 pass
                   
@@ -231,6 +267,7 @@ def SIFT_img_concate(img_left,img_left_gray,img_right,img_right_gray):
     # draw_matches(matches,img_left_rgb,img_right_rgb)
     # exit()
     inliers, H = RANSAC(matches, 0.5, 2000)
+    # H = cv2.findHomography(matches[:,0:2],matches[:,2:4])[0]
     # draw_matches(inliers,img_left_rgb,img_right_rgb)
     result = stitch_img(img_left, img_right, H)
     # convert the dtype from float to uint8
@@ -242,7 +279,9 @@ if __name__ == '__main__':
     img1 ,img1_gray = read_img("test/hotel/m1.jpg")
     img2 ,img2_gray = read_img("test/hotel/m2.jpg")
     img3 ,img3_gray = read_img("test/hotel/m3.jpg")
+    img4 ,img4_gray = read_img("test/hotel/m4.jpg")
     result , result_gray =  SIFT_img_concate(img1 ,img1_gray ,img2 ,img2_gray)
-    result, result_gray =  SIFT_img_concate(result ,result_gray ,img3 ,img3_gray)
+    # result, result_gray =  SIFT_img_concate(result ,result_gray ,img3 ,img3_gray)
+    # result, result_gray =  SIFT_img_concate(result ,result_gray ,img4 ,img4_gray)
     creat_im_window("Result",result)
     im_show()
