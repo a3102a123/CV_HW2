@@ -278,10 +278,11 @@ def SIFT_img_concate(img_left,img_left_gray,img_right,img_right_gray):
     return result, result_gray
 
 if __name__ == '__main__':
-    result , result_gray = read_img("test/hotel/m1.jpg")
-    for i in range(2,3):
-        img_path = "test/hotel/m{}.jpg".format(i)
+    result , result_gray = read_img("test/library/h_s/m1.jpg")
+    for i in range(2,9):
+        img_path = "test/library/h_s/m{}.jpg".format(i)
         img , img_gray = read_img(img_path)
         result, result_gray =  SIFT_img_concate(result ,result_gray ,img ,img_gray)
     creat_im_window("Result",result)
     im_show()
+    cv2.imwrite("result.jpg",result)
