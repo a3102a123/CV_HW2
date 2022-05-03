@@ -115,20 +115,37 @@ def draw_matches(matches, img1,img2):
     plt.show()
 
 def homography(pairs):
+    # first way Ax = 0
     rows = []
     for i in range(len(pairs)):
         p1 = np.append(pairs[i][0:2], 1)
         p2 = np.append(pairs[i][2:4], 1)
-        row1 = [0, 0, 0, p1[0], p1[1], p1[2], -p2[1]*p1[0], -p2[1]*p1[1], -p2[1]*p1[2]]
-        row2 = [p1[0], p1[1], p1[2], 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1], -p2[0]*p1[2]]
+        row1 = [0, 0, 0, p1[0], p1[1], p1[2], -p2[1]*p1[0], -p2[1]*p1[1], -p2[1]]
+        row2 = [p1[0], p1[1], p1[2], 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1], -p2[0]]
         rows.append(row1)
         rows.append(row2)
     rows = np.array(rows)
+
+    # second way Ax = B
+    B = np.zeros((8,1))
+    A = np.zeros((8,8))
+    for i in range(len(pairs)):
+        p1 = np.append(pairs[i][0:2], 1)
+        p2 = np.append(pairs[i][2:4], 1)
+        A[i,:] = [p1[0],p1[1],1,0,0,0,-p1[0] * p2[0],-p1[1] * p2[0]]
+        A[i+4,:] = [0,0,0,p1[0],p1[1],1,-p1[0] * p2[1],-p1[1] * p2[1]]
+        B[i] = p2[0]
+        B[i+4] = p2[1]
+
+    # sloving Ax = B by pseudo inverse
+    AI = np.linalg.pinv(A.T@A)
+    H = AI @ A.T @ B
+    temp = np.ones((9,1))
+    temp[0:8] = H
+    H = np.array(temp).reshape(3,3)
     # sloving A = h0 use svd 
-    # V contain the eigen vectors of matrix A
+    # # V contain the eigen vectors of matrix A
     U, s, V = np.linalg.svd(rows)
-    # idx = np.argmin(s)
-    # H = V[idx].reshape(3, 3)
     H = V[-1].reshape(3, 3)
     H = H/H[2, 2] # standardize to let w*H[2,2] = 1 to fit the format of homography matrix
     return H
@@ -259,6 +276,7 @@ def stitch_img(img1, img2, H):
     stitch_image = warped_l[:warped_r.shape[0], :warped_r.shape[1], :]
     return stitch_image
 
+
 def SIFT_img_concate(img_left,img_left_gray,img_right,img_right_gray):
     left_kp,left_des = SIFT(img_left_gray)
     right_kp,right_des = SIFT(img_right_gray)
@@ -279,7 +297,7 @@ def SIFT_img_concate(img_left,img_left_gray,img_right,img_right_gray):
 
 if __name__ == '__main__':
     result , result_gray = read_img("test/library/h_s/m1.jpg")
-    for i in range(2,9):
+    for i in range(2,3):
         img_path = "test/library/h_s/m{}.jpg".format(i)
         img , img_gray = read_img(img_path)
         result, result_gray =  SIFT_img_concate(result ,result_gray ,img ,img_gray)
